@@ -1,0 +1,2297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PNG → STP</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #131318; --panel: #1a1a21; --border: #26262f;
+    --text: #d0d0d8; --muted: #6e6e7a;
+    --accent: #7c89e0; --accent-hover: #8f9be8; --input: #21212a;
+    --danger: #d96b6b; --warn: #e8a34b;
+  }
+  html, body { height: 100%; font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text); font-size: 13px; overflow: hidden; }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+  header { display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; background: var(--panel);
+    border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+  header .logo { font-weight: 600; color: #fff; font-size: 14px; letter-spacing: 0.3px; }
+  header .logo span { color: var(--muted); font-weight: 400; }
+  .spacer { flex: 1; }
+  button, .fileBtn { padding: 8px 14px; background: var(--input); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+    font-family: inherit; font-size: 12.5px;
+    transition: background 0.1s, border-color 0.1s;
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  button:hover, .fileBtn:hover { background: #2b2b36; }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: var(--accent-hover); }
+  button.primary:disabled { background: #353a55; border-color: #353a55; color: #888; }
+  button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--danger); }
+  button.danger:hover { background: rgba(217,107,107,0.1); }
+  input[type="file"] { display: none; }
+
+  .switchWrap {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 10px; background: var(--input);
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 11.5px; user-select: none;
+  }
+  .switchLabel { color: var(--muted); transition: color 0.15s; cursor: pointer; white-space: nowrap; }
+  .switchLabel.active { color: var(--text); font-weight: 500; }
+  .switch { position: relative; display: inline-block; width: 34px; height: 18px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: #3a3a45; border-radius: 18px;
+    transition: background 0.18s ease;
+  }
+  .slider::before {
+    content: ''; position: absolute;
+    height: 14px; width: 14px; left: 2px; top: 2px;
+    background: #d0d0d8; border-radius: 50%;
+    transition: transform 0.18s ease, background 0.18s ease;
+  }
+  .switch input:checked + .slider { background: var(--accent); }
+  .switch input:checked + .slider::before { transform: translateX(16px); background: #fff; }
+
+  #stage { flex: 1; position: relative; min-height: 0; }
+  #threeContainer {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 40%, #f6f7fb 0%, #e3e6ee 55%, #d2d6e2 100%);
+  }
+  #threeContainer canvas { display: block; }
+
+  #panel { position: absolute; top: 14px; right: 14px; width: 240px;
+    background: rgba(26, 26, 33, 0.94); backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; display: flex; flex-direction: column;
+    max-height: calc(100% - 120px); overflow-y: auto;
+    z-index: 10; }
+  #panel h3 { font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1.2px; color: var(--muted); margin-bottom: 8px; }
+  #panel label { display: block; font-size: 11px; color: var(--muted); margin-top: 10px; margin-bottom: 4px; }
+
+  input[type="number"] {
+    width: 100%; padding: 8px 10px;
+    background: var(--input); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text);
+    font-family: inherit; font-size: 12.5px;
+    outline: none; -moz-appearance: textfield;
+  }
+  input[type="number"]:focus { border-color: var(--accent); }
+  input[type="number"]:disabled { opacity: 0.4; cursor: not-allowed; }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+
+  .checkRow {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 12px; cursor: pointer; user-select: none;
+    font-size: 11.5px; color: var(--muted);
+  }
+  .checkRow input[type="checkbox"] {
+    width: 14px; height: 14px; cursor: pointer;
+    accent-color: var(--accent); margin: 0;
+  }
+  .checkRow:hover span { color: var(--text); }
+
+  .btnGroup { display: flex; gap: 4px; flex-wrap: wrap; }
+  .btnGroup .toggle-btn {
+    flex: 1 1 45%; padding: 6px 8px; font-size: 11px;
+    justify-content: center;
+  }
+  .panelDivider { height: 1px; background: var(--border); margin: 12px -14px; }
+
+  #infoBar {
+    position: absolute; bottom: 14px; left: 14px; font-size: 12px;
+    color: #3a3f4a; padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.85); border-radius: 5px;
+    border: 1px solid rgba(0,0,0,0.08); pointer-events: none;
+    font-variant-numeric: tabular-nums; z-index: 5;
+  }
+
+  #statusWrap {
+    position: absolute; bottom: 14px; right: 14px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+    z-index: 20;
+  }
+  #status {
+    font-size: 11px; color: #333842; padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.88); border-radius: 5px;
+    border: 1px solid rgba(0,0,0,0.08); cursor: pointer;
+    user-select: none; max-width: 340px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: background 0.12s;
+  }
+  #status:hover { background: #fff; }
+
+  #statusLog {
+    display: none;
+    width: 340px; max-height: 320px;
+    background: rgba(26, 26, 33, 0.97); backdrop-filter: blur(14px);
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  }
+  #statusLog.open { display: flex; }
+
+  #statusLogHeader {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--muted); flex-shrink: 0;
+  }
+  #statusLogHeader button {
+    padding: 4px 10px; font-size: 10.5px; background: transparent;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+  #statusLogHeader button:hover { color: var(--danger); border-color: var(--danger); background: transparent; }
+
+  #statusList {
+    list-style: none; overflow-y: auto; padding: 4px 0;
+    margin: 0; flex: 1; min-height: 0;
+  }
+  #statusList::-webkit-scrollbar { width: 6px; }
+  #statusList::-webkit-scrollbar-thumb { background: #3a3a45; border-radius: 3px; }
+
+  #statusList li {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 6px 12px; font-size: 11.5px; color: var(--text);
+    line-height: 1.35; border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  #statusList li:last-child { border-bottom: none; }
+  #statusList li.empty { color: var(--muted); font-style: italic; justify-content: center; }
+
+  .h-time {
+    flex-shrink: 0; color: var(--muted); font-variant-numeric: tabular-nums;
+    font-size: 10.5px; padding-top: 1px; min-width: 60px;
+  }
+  .h-text { flex: 1; word-break: break-word; }
+  .h-del {
+    flex-shrink: 0; padding: 0 !important; width: 18px; height: 18px;
+    background: transparent !important; border: none !important;
+    color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 3px;
+  }
+  .h-del:hover { color: var(--danger); background: rgba(217,107,107,0.15) !important; }
+
+  #magnetInfo { font-size: 11px; color: var(--muted); margin-top: 10px; }
+  #clearMagnets { width: 100%; margin-top: 10px; padding: 8px; font-size: 11.5px; }
+
+  .editNote { font-size: 10.5px; color: var(--muted); margin-top: 6px; font-style: italic; line-height: 1.4; }
+  #selectedCount { font-size: 11.5px; color: var(--text); margin-top: 8px; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "earcut": "https://cdn.jsdelivr.net/npm/earcut@2.2.4/+esm",
+    "d3-contour": "https://cdn.jsdelivr.net/npm/d3-contour@4.0.2/+esm",
+    "polygon-clipping": "https://esm.sh/polygon-clipping@0.15.7"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">PNG<span>/STP</span></div>
+    <label class="fileBtn">Загрузить PNG <input type="file" id="pngInput" accept="image/png,image/webp"></label>
+
+    <div class="switchWrap" title="Какой цвет поднимается над подложкой">
+      <span class="switchLabel" id="switchLabelBlack">Тёмное</span>
+      <label class="switch">
+        <input type="checkbox" id="invertSwitch">
+        <span class="slider"></span>
+      </label>
+      <span class="switchLabel" id="switchLabelWhite">Светлое</span>
+    </div>
+
+    <button id="magnetBtn">Ниша под магнит</button>
+    <button id="editBtn">Редактировать</button>
+    <button id="resetViewBtn">Сбросить вид</button>
+    <div class="spacer"></div>
+    <button id="exportBtn" class="primary" disabled>Скачать STP</button>
+  </header>
+  <div id="stage">
+    <div id="threeContainer"></div>
+    <aside id="panel">
+      <div id="editSection" style="display:none;">
+        <h3>Редактирование</h3>
+        <label>Режим</label>
+        <div class="btnGroup">
+          <button id="editActionDelete" class="toggle-btn active">Удаление</button>
+          <button id="editActionHeight" class="toggle-btn">Высота</button>
+        </div>
+
+        <div id="deletePanel">
+          <label>Что удалять</label>
+          <div class="btnGroup">
+            <button id="editTargetBase" class="toggle-btn">Подложка</button>
+            <button id="editTargetDetail" class="toggle-btn active">Рисунок</button>
+          </div>
+          <label>Инструмент</label>
+          <div class="btnGroup">
+            <button id="editToolClick" class="toggle-btn active">Клик</button>
+            <button id="editToolBrush" class="toggle-btn">Кисть</button>
+            <button id="editToolSelect" class="toggle-btn">Выделить</button>
+          </div>
+          <label>Размер ластика, мм</label>
+          <input type="number" id="eraserSizeInput" min="0.5" max="50" step="0.5" value="5">
+        </div>
+
+        <div id="heightPanel" style="display:none;">
+          <div class="editNote">Кликните элемент для выбора.<br>Ctrl+Клик — добавить/убрать из выбора.</div>
+          <div id="selectedCount">Выбрано: 0</div>
+          <label>Высота выбранных, мм</label>
+          <input type="number" id="zoneHeightInput" min="0.1" max="10" step="0.1" value="1.4" disabled>
+        </div>
+
+        <div class="editNote" style="margin-top:10px;">ЛКМ — инструмент · ПКМ — вращение · СКМ — панорама<br>Ctrl+Z / Ctrl+Y — отмена / повтор</div>
+        <button id="exitEditBtn" style="width:100%; margin-top:10px;">Выйти</button>
+      </div>
+
+      <div id="normalSection">
+        <h3>Параметры</h3>
+        <label>Ширина, мм</label>
+        <input type="number" id="realWidthInput" min="10" max="500" step="1" value="" disabled>
+        <label>Высота, мм</label>
+        <input type="number" id="realHeightInput" min="10" max="500" step="1" value="" disabled>
+        <label class="checkRow">
+          <input type="checkbox" id="preserveAspectInput" checked>
+          <span>Сохранять пропорции</span>
+        </label>
+        <label>Подложка, мм</label>
+        <input type="number" id="baseHeightInput" min="0.2" max="5" step="0.1" value="1.8">
+        <label>Рисунок, мм</label>
+        <input type="number" id="detailHeightInput" min="0.1" max="3" step="0.1" value="1.4">
+        <label>Упрощение контура</label>
+        <input type="number" id="smoothnessInput" min="0.2" max="4" step="0.1" value="1.0">
+        <label>Сжатие/расширение контура, мм</label>
+        <input type="number" id="offsetInput" min="-20" max="20" step="0.1" value="0">
+      </div>
+      <div id="magnetSection" style="display:none;">
+        <h3>Ниши под магниты</h3>
+        <label>Диаметр, мм</label>
+        <input type="number" id="magnetDiamInput" min="3" max="30" step="0.5" value="11">
+        <label>Глубина, мм</label>
+        <input type="number" id="magnetDepthInput" min="0.2" max="5" step="0.1" value="1.2">
+        <div id="magnetInfo">Ниш: 0</div>
+        <button id="clearMagnets" class="danger">Очистить все</button>
+      </div>
+    </aside>
+
+    <div id="infoBar">Загрузите PNG</div>
+
+    <div id="statusWrap">
+      <div id="statusLog">
+        <div id="statusLogHeader">
+          <span>История изменений</span>
+          <button id="clearHistoryBtn">Очистить</button>
+        </div>
+        <ul id="statusList"></ul>
+      </div>
+      <div id="status" title="Нажмите, чтобы открыть историю">Загрузите PNG, чтобы начать</div>
+    </div>
+  </div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import earcut from 'earcut';
+import { contours as d3Contours } from 'd3-contour';
+import polygonClipping from 'polygon-clipping';
+
+const PLATE = 250;
+const COL_LIGHT = 0xd2d5de;
+const COL_DARK  = 0x2e3345;
+const DEFAULT_SIZE_MM = 80;
+
+const state = {
+  realWidth: null, realHeight: null,
+  baseHeight: 1.8, detailHeight: 1.4,
+  preserveAspect: true,
+  imgAspect: 1, smoothness: 1.0,
+  offsetMM: 0,
+  invertRelief: false,
+  rawBasePolys: null, rawDetailPolys: null,
+  basePolys: null,
+  detailZones: null,
+  polygonsDirty: true,
+  maskW: 0, maskH: 0,
+  srcPixels: null,
+  lastBounds: null,
+  firstBuild: true,
+  magnetMode: false,
+  magnetHoles: [],
+  magnetDiam: 11, magnetDepth: 1.2,
+  editMode: false,
+  editAction: 'delete',
+  editTarget: 'detail',
+  editTool: 'click',
+  eraserSize: 5,
+  selectedZones: [],
+};
+
+// ============ SCENE ============
+const container = document.getElementById('threeContainer');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setClearColor(0x000000, 0);
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.3, 5000);
+camera.up.set(0, 0, 1);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI - 0.001;
+controls.minPolarAngle = 0.001;
+controls.minDistance = 5;
+controls.maxDistance = 1500;
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const dl1 = new THREE.DirectionalLight(0xffffff, 1.2); dl1.position.set(120, -180, 250); scene.add(dl1);
+const dl2 = new THREE.DirectionalLight(0x9db8ff, 0.5); dl2.position.set(-150, 120, 100); scene.add(dl2);
+const dl3 = new THREE.DirectionalLight(0xffffff, 0.3); dl3.position.set(0, 200, -100); scene.add(dl3);
+
+const grid = new THREE.GridHelper(PLATE, 25, 0xa8adb8, 0xb8bcc8);
+grid.rotation.x = Math.PI / 2;
+grid.material.transparent = true;
+grid.material.opacity = 0.4;
+grid.material.depthWrite = false;
+scene.add(grid);
+
+const modelGroup = new THREE.Group();
+scene.add(modelGroup);
+const markerGroup = new THREE.Group();
+scene.add(markerGroup);
+const previewGroup = new THREE.Group();
+scene.add(previewGroup);
+
+const baseMaterial = new THREE.MeshStandardMaterial({
+  color: COL_LIGHT, roughness: 0.7, metalness: 0.05,
+  side: THREE.DoubleSide, flatShading: true,
+});
+const detailMaterial = new THREE.MeshStandardMaterial({
+  color: COL_DARK, roughness: 0.65, metalness: 0.1,
+  side: THREE.DoubleSide, flatShading: true,
+});
+
+const cursorRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.88, 1, 40),
+  new THREE.MeshBasicMaterial({
+    color: 0xd96b6b, side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+    transparent: true, opacity: 0.85,
+  })
+);
+cursorRing.renderOrder = 2100;
+cursorRing.visible = false;
+scene.add(cursorRing);
+
+const raycaster = new THREE.Raycaster();
+const _planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+const _pointTmp = new THREE.Vector3();
+
+// ============ RENDERING ============
+let needsRender = true;
+function requestRender() { needsRender = true; }
+
+function resize() {
+  const w = container.clientWidth, h = container.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  requestRender();
+}
+new ResizeObserver(resize).observe(container);
+resize();
+
+controls.addEventListener('change', requestRender);
+
+function tick() {
+  const changed = controls.update();
+  if (changed || needsRender) {
+    renderer.render(scene, camera);
+    needsRender = false;
+  }
+  requestAnimationFrame(tick);
+}
+tick();
+
+// ============ VIEWS ============
+function getModelDims() {
+  return {
+    modelW: state.realWidth ?? DEFAULT_SIZE_MM,
+    modelH: state.realHeight ?? DEFAULT_SIZE_MM,
+  };
+}
+function getPartCenterZ() {
+  return (state.baseHeight + state.detailHeight) / 2;
+}
+function setTopView() {
+  const { modelW, modelH } = getModelDims();
+  const size = Math.max(modelW, modelH);
+  const D = size * 1.6;
+  camera.up.set(0, 0, 1);
+  camera.position.set(0, -D * 0.03, D);
+  controls.target.set(0, 0, getPartCenterZ());
+  controls.update();
+  requestRender();
+}
+function setBottomView() {
+  const { modelW, modelH } = getModelDims();
+  const size = Math.max(modelW, modelH);
+  const D = size * 1.6;
+  camera.up.set(0, 1, 0);
+  camera.position.set(0, -D * 0.03, -D);
+  controls.target.set(0, 0, getPartCenterZ());
+  controls.update();
+  requestRender();
+}
+
+// ============ UI ============
+const $ = id => document.getElementById(id);
+const pngInput = $('pngInput');
+const exportBtn = $('exportBtn');
+const magnetBtn = $('magnetBtn');
+const editBtn = $('editBtn');
+const resetViewBtn = $('resetViewBtn');
+const invertSwitch = $('invertSwitch');
+const switchLabelBlack = $('switchLabelBlack');
+const switchLabelWhite = $('switchLabelWhite');
+const normalSection = $('normalSection');
+const magnetSection = $('magnetSection');
+const editSection = $('editSection');
+const magnetInfo = $('magnetInfo');
+const clearMagnetsBtn = $('clearMagnets');
+const statusEl = $('status');
+const statusLogEl = $('statusLog');
+const statusWrapEl = $('statusWrap');
+const statusListEl = $('statusList');
+const clearHistoryBtn = $('clearHistoryBtn');
+const infoBarEl = $('infoBar');
+const preserveAspectInput = $('preserveAspectInput');
+const realWidthInput = $('realWidthInput');
+const realHeightInput = $('realHeightInput');
+const editActionDelete = $('editActionDelete');
+const editActionHeight = $('editActionHeight');
+const deletePanel = $('deletePanel');
+const heightPanel = $('heightPanel');
+const editTargetBase = $('editTargetBase');
+const editTargetDetail = $('editTargetDetail');
+const editToolClick = $('editToolClick');
+const editToolBrush = $('editToolBrush');
+const editToolSelect = $('editToolSelect');
+const eraserSizeInput = $('eraserSizeInput');
+const selectedCount = $('selectedCount');
+const zoneHeightInput = $('zoneHeightInput');
+const exitEditBtn = $('exitEditBtn');
+
+let logOpen = false;
+
+function setStatus(t) { statusEl.textContent = t; }
+
+function updateSwitchLabels() {
+  switchLabelBlack.classList.toggle('active', !state.invertRelief);
+  switchLabelWhite.classList.toggle('active', state.invertRelief);
+}
+
+function updateInfoBar() {
+  if (!state.rawBasePolys) { infoBarEl.textContent = 'Загрузите PNG'; return; }
+  if (state.lastBounds) {
+    infoBarEl.textContent = `${state.lastBounds.w.toFixed(1)} × ${state.lastBounds.h.toFixed(1)} мм`;
+  } else {
+    infoBarEl.textContent = 'Нет детали';
+  }
+}
+
+// ============ HISTORY + UNDO/REDO ============
+const changeLog = [];
+const redoStack = [];
+let historyId = 1;
+const MAX_LOG = 300;
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function renderHistory() {
+  if (!changeLog.length) {
+    statusListEl.innerHTML = '<li class="empty">История пуста</li>';
+    return;
+  }
+  statusListEl.innerHTML = changeLog.map((h, i) => `
+    <li>
+      <span class="h-time">${h.time.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+      <span class="h-text">${escapeHtml(h.text)}</span>
+      <button class="h-del" data-idx="${i}" title="Отменить это и все новее">×</button>
+    </li>
+  `).join('');
+}
+
+function logHistory(text, undoFn = null, redoFn = null) {
+  changeLog.unshift({ id: historyId++, text, time: new Date(), undo: undoFn, redo: redoFn });
+  if (changeLog.length > MAX_LOG) changeLog.pop();
+  redoStack.length = 0;
+  renderHistory();
+  setStatus(text);
+}
+
+function doUndo() {
+  if (!changeLog.length) {
+    setStatus('Нечего отменять');
+    return;
+  }
+  const entry = changeLog.shift();
+  if (entry.undo) { try { entry.undo(); } catch (e) { console.error(e); } }
+  if (entry.redo) redoStack.unshift(entry);
+  renderHistory();
+  setStatus('↶ ' + entry.text);
+}
+
+function doRedo() {
+  if (!redoStack.length) {
+    setStatus('Нечего повторять');
+    return;
+  }
+  const entry = redoStack.shift();
+  if (entry.redo) { try { entry.redo(); } catch (e) { console.error(e); } }
+  if (entry.undo) changeLog.unshift(entry);
+  renderHistory();
+  setStatus('↷ ' + entry.text);
+}
+
+function rollbackToIndex(targetIndex) {
+  while (changeLog.length > targetIndex) {
+    const entry = changeLog.shift();
+    if (entry.undo) { try { entry.undo(); } catch (e) { console.error(e); } }
+  }
+  redoStack.length = 0;
+  renderHistory();
+  setStatus('Изменение отменено');
+}
+
+statusListEl.addEventListener('click', e => {
+  const btn = e.target.closest('.h-del');
+  if (!btn) return;
+  e.stopPropagation();
+  const idx = parseInt(btn.dataset.idx, 10);
+  if (isNaN(idx)) return;
+  rollbackToIndex(idx);
+});
+
+clearHistoryBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  changeLog.length = 0;
+  redoStack.length = 0;
+  renderHistory();
+});
+
+statusEl.addEventListener('click', e => {
+  e.stopPropagation();
+  logOpen = !logOpen;
+  statusLogEl.classList.toggle('open', logOpen);
+});
+
+document.addEventListener('pointerdown', e => {
+  if (!logOpen) return;
+  if (statusWrapEl.contains(e.target)) return;
+  logOpen = false;
+  statusLogEl.classList.remove('open');
+});
+
+// ============ GLOBAL UNDO / REDO (любая раскладка) ============
+function isInEditableField(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
+function handleUndoRedoKey(e) {
+  // Только ctrl/cmd; alt/extra не мешают
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod) return;
+  if (e.altKey) return;
+
+  // e.code — физическая клавиша (KeyZ/KeyY), не зависит от раскладки (RU/EN).
+  // e.key.toLowerCase() — fallback для экзотических браузеров, где code пуст.
+  const code = e.code || '';
+  const keyLower = (e.key || '').toLowerCase();
+  const isZ = code === 'KeyZ' || keyLower === 'z' || keyLower === 'я';
+  const isY = code === 'KeyY' || keyLower === 'y' || keyLower === 'н';
+  if (!isZ && !isY) return;
+
+  // Внутри поля ввода — не перехватываем, отдаём браузеру
+  if (isInEditableField(e.target)) return;
+
+  if (isZ && !e.shiftKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    doUndo();
+    return;
+  }
+  if (isY || (isZ && e.shiftKey)) {
+    e.preventDefault();
+    e.stopPropagation();
+    doRedo();
+    return;
+  }
+}
+
+// capture=true, чтобы гарантированно перехватить до OrbitControls/браузера
+document.addEventListener('keydown', handleUndoRedoKey, true);
+window.addEventListener('keydown', handleUndoRedoKey, true);
+
+// ============ BINDINGS ============
+function bindNumber(id, key, integer = false, logLabel = null, onChange = null) {
+  const el = $(id);
+  const min = parseFloat(el.min), max = parseFloat(el.max);
+  state[key] = parseFloat(el.value);
+
+  let focusOld = state[key];
+  el.addEventListener('focus', () => { el.select(); focusOld = state[key]; });
+  el.addEventListener('click', () => el.select());
+
+  let timer = null;
+  el.addEventListener('input', () => {
+    let v = parseFloat(el.value);
+    if (isNaN(v) || v < min || v > max) return;
+    if (integer) v = Math.round(v);
+    state[key] = v;
+    if (onChange) onChange();
+    clearTimeout(timer);
+    timer = setTimeout(rebuild, 150);
+  });
+  el.addEventListener('change', () => {
+    const oldVal = focusOld;
+    let v = parseFloat(el.value);
+    if (isNaN(v)) v = state[key];
+    v = Math.max(min, Math.min(max, v));
+    if (integer) v = Math.round(v);
+    el.value = v;
+    state[key] = v;
+    if (onChange) onChange();
+    rebuild();
+    if (logLabel && oldVal !== state[key]) {
+      const newVal = state[key];
+      logHistory(logLabel(newVal),
+        () => { state[key] = oldVal; el.value = oldVal; if (onChange) onChange(); rebuild(); },
+        () => { state[key] = newVal; el.value = newVal; if (onChange) onChange(); rebuild(); }
+      );
+    }
+    focusOld = state[key];
+  });
+}
+
+function bindSizeInputs() {
+  const wEl = realWidthInput, hEl = realHeightInput;
+  const wMin = parseFloat(wEl.min), wMax = parseFloat(wEl.max);
+  const hMin = parseFloat(hEl.min), hMax = parseFloat(hEl.max);
+
+  let focusW = null, focusH = null;
+  let wTimer = null, hTimer = null;
+
+  function applyRatioFromWidth(w) {
+    if (!state.preserveAspect || !state.imgAspect || state.imgAspect <= 0) return;
+    state.realHeight = Math.max(hMin, Math.min(hMax, Math.round(w / state.imgAspect)));
+    hEl.value = state.realHeight;
+  }
+  function applyRatioFromHeight(h) {
+    if (!state.preserveAspect || !state.imgAspect || state.imgAspect <= 0) return;
+    state.realWidth = Math.max(wMin, Math.min(wMax, Math.round(h * state.imgAspect)));
+    wEl.value = state.realWidth;
+  }
+
+  wEl.addEventListener('focus', () => { wEl.select(); focusW = state.realWidth; focusH = state.realHeight; });
+  wEl.addEventListener('click', () => wEl.select());
+  wEl.addEventListener('input', () => {
+    let v = parseFloat(wEl.value);
+    if (isNaN(v) || v < wMin || v > wMax) return;
+    state.realWidth = Math.round(v);
+    applyRatioFromWidth(v);
+    clearTimeout(wTimer);
+    wTimer = setTimeout(rebuild, 150);
+  });
+  wEl.addEventListener('change', () => {
+    const oldW = focusW, oldH = focusH;
+    let v = parseFloat(wEl.value);
+    if (isNaN(v)) v = state.realWidth ?? DEFAULT_SIZE_MM;
+    v = Math.max(wMin, Math.min(wMax, v));
+    state.realWidth = Math.round(v);
+    applyRatioFromWidth(v);
+    wEl.value = state.realWidth;
+    rebuild();
+    if (oldW !== state.realWidth || oldH !== state.realHeight) {
+      const newW = state.realWidth, newH = state.realHeight;
+      logHistory(`Размер: ${newW} × ${newH} мм`,
+        () => { state.realWidth = oldW; state.realHeight = oldH; wEl.value = oldW ?? ''; hEl.value = oldH ?? ''; rebuild(); },
+        () => { state.realWidth = newW; state.realHeight = newH; wEl.value = newW ?? ''; hEl.value = newH ?? ''; rebuild(); }
+      );
+    }
+    focusW = state.realWidth; focusH = state.realHeight;
+  });
+
+  hEl.addEventListener('focus', () => { hEl.select(); focusW = state.realWidth; focusH = state.realHeight; });
+  hEl.addEventListener('click', () => hEl.select());
+  hEl.addEventListener('input', () => {
+    let v = parseFloat(hEl.value);
+    if (isNaN(v) || v < hMin || v > hMax) return;
+    state.realHeight = Math.round(v);
+    applyRatioFromHeight(v);
+    clearTimeout(hTimer);
+    hTimer = setTimeout(rebuild, 150);
+  });
+  hEl.addEventListener('change', () => {
+    const oldW = focusW, oldH = focusH;
+    let v = parseFloat(hEl.value);
+    if (isNaN(v)) v = state.realHeight ?? DEFAULT_SIZE_MM;
+    v = Math.max(hMin, Math.min(hMax, v));
+    state.realHeight = Math.round(v);
+    applyRatioFromHeight(v);
+    hEl.value = state.realHeight;
+    rebuild();
+    if (oldW !== state.realWidth || oldH !== state.realHeight) {
+      const newW = state.realWidth, newH = state.realHeight;
+      logHistory(`Размер: ${newW} × ${newH} мм`,
+        () => { state.realWidth = oldW; state.realHeight = oldH; wEl.value = oldW ?? ''; hEl.value = oldH ?? ''; rebuild(); },
+        () => { state.realWidth = newW; state.realHeight = newH; wEl.value = newW ?? ''; hEl.value = newH ?? ''; rebuild(); }
+      );
+    }
+    focusW = state.realWidth; focusH = state.realHeight;
+  });
+
+  return {
+    setValues(w, h) {
+      state.realWidth = w;
+      state.realHeight = h;
+      wEl.value = w ?? '';
+      hEl.value = h ?? '';
+      wEl.disabled = w === null;
+      hEl.disabled = h === null;
+    }
+  };
+}
+
+const sizeBind = bindSizeInputs();
+bindNumber('baseHeightInput', 'baseHeight', false, v => `Подложка: ${v.toFixed(1)} мм`);
+bindNumber('detailHeightInput', 'detailHeight', false, v => `Рисунок: ${v.toFixed(1)} мм`);
+bindNumber('smoothnessInput', 'smoothness', false, v => `Упрощение контура: ${v.toFixed(1)}`,
+  () => { state.polygonsDirty = true; });
+bindNumber('offsetInput', 'offsetMM', false, v => `Отступ контура: ${v.toFixed(1)} мм`);
+bindNumber('magnetDiamInput', 'magnetDiam', false, v => `Ø магнита: ${v.toFixed(1)} мм`);
+bindNumber('magnetDepthInput', 'magnetDepth', false, v => `Глубина ниши: ${v.toFixed(1)} мм`);
+bindNumber('eraserSizeInput', 'eraserSize', false, null);
+
+preserveAspectInput.addEventListener('change', () => {
+  const oldVal = state.preserveAspect;
+  state.preserveAspect = preserveAspectInput.checked;
+  const newVal = state.preserveAspect;
+  logHistory(newVal ? 'Пропорции: сохранять' : 'Пропорции: свободно',
+    () => { state.preserveAspect = oldVal; preserveAspectInput.checked = oldVal; },
+    () => { state.preserveAspect = newVal; preserveAspectInput.checked = newVal; }
+  );
+});
+
+invertSwitch.addEventListener('change', () => {
+  const oldVal = state.invertRelief;
+  state.invertRelief = invertSwitch.checked;
+  const newVal = state.invertRelief;
+  updateSwitchLabels();
+  if (state.srcPixels) recomputeMasks(false);
+  logHistory(newVal ? 'Рельеф: светлое' : 'Рельеф: тёмное',
+    () => { state.invertRelief = oldVal; invertSwitch.checked = oldVal; updateSwitchLabels(); if (state.srcPixels) recomputeMasks(false); },
+    () => { state.invertRelief = newVal; invertSwitch.checked = newVal; updateSwitchLabels(); if (state.srcPixels) recomputeMasks(false); }
+  );
+});
+
+switchLabelBlack.addEventListener('click', () => {
+  if (!invertSwitch.checked) return;
+  invertSwitch.checked = false;
+  invertSwitch.dispatchEvent(new Event('change'));
+});
+switchLabelWhite.addEventListener('click', () => {
+  if (invertSwitch.checked) return;
+  invertSwitch.checked = true;
+  invertSwitch.dispatchEvent(new Event('change'));
+});
+
+// ============ MODE SWITCHING ============
+function updateControlsForMode() {
+  if (state.editMode) {
+    controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+    renderer.domElement.style.cursor = 'crosshair';
+  } else if (state.magnetMode) {
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+    renderer.domElement.style.cursor = 'crosshair';
+  } else {
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+    renderer.domElement.style.cursor = 'grab';
+  }
+}
+
+function updateEditUI() {
+  editActionDelete.classList.toggle('active', state.editAction === 'delete');
+  editActionHeight.classList.toggle('active', state.editAction === 'height');
+  deletePanel.style.display = state.editAction === 'delete' ? 'block' : 'none';
+  heightPanel.style.display = state.editAction === 'height' ? 'block' : 'none';
+
+  editTargetBase.classList.toggle('active', state.editTarget === 'base');
+  editTargetDetail.classList.toggle('active', state.editTarget === 'detail');
+  editToolClick.classList.toggle('active', state.editTool === 'click');
+  editToolBrush.classList.toggle('active', state.editTool === 'brush');
+  editToolSelect.classList.toggle('active', state.editTool === 'select');
+
+  const n = state.selectedZones.length;
+  selectedCount.textContent = `Выбрано: ${n}`;
+
+  if (n === 0) {
+    zoneHeightInput.disabled = true;
+    zoneHeightInput.value = '';
+    zoneHeightInput.placeholder = '—';
+  } else if (n === 1) {
+    zoneHeightInput.disabled = false;
+    const h = state.selectedZones[0].customHeight ?? state.detailHeight;
+    zoneHeightInput.value = h.toFixed(1);
+    zoneHeightInput.placeholder = '';
+  } else {
+    const hs = state.selectedZones.map(z => z.customHeight ?? state.detailHeight);
+    const same = hs.every(h => Math.abs(h - hs[0]) < 0.001);
+    zoneHeightInput.disabled = false;
+    zoneHeightInput.value = same ? hs[0].toFixed(1) : '';
+    zoneHeightInput.placeholder = same ? '' : 'разные';
+  }
+
+  if (state.editAction !== 'delete' || state.editTool === 'select') {
+    cursorRing.visible = false;
+  }
+  requestRender();
+}
+
+function enterEditMode() {
+  if (state.magnetMode) {
+    state.magnetMode = false;
+    magnetBtn.classList.remove('active');
+    magnetSection.style.display = 'none';
+  }
+  state.editMode = true;
+  editBtn.classList.add('active');
+  editSection.style.display = 'block';
+  normalSection.style.display = 'none';
+  magnetSection.style.display = 'none';
+  setTopView();
+  updateControlsForMode();
+  updateEditUI();
+  rebuild();
+}
+
+function exitEditMode() {
+  state.editMode = false;
+  editBtn.classList.remove('active');
+  editSection.style.display = 'none';
+  normalSection.style.display = 'block';
+  state.selectedZones = [];
+  cursorRing.visible = false;
+  clearGroup(previewGroup);
+  updateControlsForMode();
+  rebuild();
+}
+
+editBtn.addEventListener('click', () => {
+  if (state.editMode) exitEditMode();
+  else enterEditMode();
+});
+
+exitEditBtn.addEventListener('click', exitEditMode);
+
+magnetBtn.addEventListener('click', () => {
+  if (state.editMode) exitEditMode();
+  state.magnetMode = !state.magnetMode;
+  magnetBtn.classList.toggle('active', state.magnetMode);
+  normalSection.style.display = state.magnetMode ? 'none' : 'block';
+  magnetSection.style.display = state.magnetMode ? 'block' : 'none';
+  if (state.magnetMode) setBottomView(); else setTopView();
+  updateControlsForMode();
+  rebuild();
+});
+
+editActionDelete.addEventListener('click', () => {
+  state.editAction = 'delete';
+  cursorRing.visible = false;
+  clearGroup(previewGroup);
+  updateEditUI();
+  requestRender();
+});
+editActionHeight.addEventListener('click', () => {
+  state.editAction = 'height';
+  cursorRing.visible = false;
+  clearGroup(previewGroup);
+  updateEditUI();
+  requestRender();
+});
+
+editTargetBase.addEventListener('click', () => { state.editTarget = 'base'; updateEditUI(); rebuild(); });
+editTargetDetail.addEventListener('click', () => { state.editTarget = 'detail'; updateEditUI(); rebuild(); });
+editToolClick.addEventListener('click', () => { state.editTool = 'click'; updateEditUI(); });
+editToolBrush.addEventListener('click', () => { state.editTool = 'brush'; updateEditUI(); });
+editToolSelect.addEventListener('click', () => { state.editTool = 'select'; updateEditUI(); });
+
+resetViewBtn.addEventListener('click', setTopView);
+
+clearMagnetsBtn.addEventListener('click', () => {
+  if (!state.magnetHoles.length) return;
+  const oldMags = [...state.magnetHoles];
+  state.magnetHoles = [];
+  rebuild();
+  logHistory('Все ниши удалены',
+    () => { state.magnetHoles = [...oldMags]; rebuild(); },
+    () => { state.magnetHoles = []; rebuild(); }
+  );
+});
+
+// ============ SNAPSHOT HELPERS ============
+function snapshotEdits() {
+  return {
+    basePolys: state.basePolys,
+    detailZones: state.detailZones
+      ? state.detailZones.map(z => ({ polygon: z.polygon, customHeight: z.customHeight }))
+      : null,
+  };
+}
+
+function restoreEdits(snap) {
+  state.basePolys = snap.basePolys;
+  state.detailZones = snap.detailZones
+    ? snap.detailZones.map(z => ({ polygon: z.polygon, customHeight: z.customHeight }))
+    : null;
+  state.selectedZones = [];
+  state.polygonsDirty = !snap.basePolys;
+  rebuild();
+}
+
+function captureFullState() {
+  return {
+    srcPixels: state.srcPixels,
+    maskW: state.maskW, maskH: state.maskH,
+    imgAspect: state.imgAspect,
+    rawBasePolys: state.rawBasePolys, rawDetailPolys: state.rawDetailPolys,
+    basePolys: state.basePolys,
+    detailZones: state.detailZones
+      ? state.detailZones.map(z => ({ polygon: z.polygon, customHeight: z.customHeight }))
+      : null,
+    magnetHoles: [...state.magnetHoles],
+    lastBounds: state.lastBounds,
+    realWidth: state.realWidth, realHeight: state.realHeight,
+  };
+}
+
+function restoreFullState(s) {
+  state.srcPixels = s.srcPixels;
+  state.maskW = s.maskW; state.maskH = s.maskH;
+  state.imgAspect = s.imgAspect;
+  state.rawBasePolys = s.rawBasePolys; state.rawDetailPolys = s.rawDetailPolys;
+  state.basePolys = s.basePolys;
+  state.detailZones = s.detailZones
+    ? s.detailZones.map(z => ({ polygon: z.polygon, customHeight: z.customHeight }))
+    : null;
+  state.magnetHoles = [...s.magnetHoles];
+  state.lastBounds = s.lastBounds;
+  state.selectedZones = [];
+  state.polygonsDirty = !s.basePolys;
+  sizeBind.setValues(s.realWidth, s.realHeight);
+
+  if (!s.srcPixels) {
+    clearGroup(modelGroup);
+    clearGroup(markerGroup);
+    updateInfoBar();
+    requestRender();
+  } else {
+    rebuild();
+  }
+}
+
+// ============ EDIT GEOMETRY HELPERS ============
+function screenToModel2D(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const mx = ((clientX - rect.left) / rect.width) * 2 - 1;
+  const my = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(new THREE.Vector2(mx, my), camera);
+  _planeZ.constant = -state.baseHeight;
+  _planeZ.normal.set(0, 0, 1);
+  if (raycaster.ray.intersectPlane(_planeZ, _pointTmp)) {
+    const { modelW, modelH } = getModelDims();
+    return { x: _pointTmp.x, y: _pointTmp.y, modelW, modelH };
+  }
+  return null;
+}
+
+function circleToPolyNorm(cx, cy, r, modelW, modelH) {
+  const segs = 32;
+  const ring = [];
+  for (let i = 0; i < segs; i++) {
+    const ang = -i * Math.PI * 2 / segs;
+    const px = cx + r * Math.cos(ang);
+    const py = cy + r * Math.sin(ang);
+    ring.push([px / modelW + 0.5, 0.5 - py / modelH]);
+  }
+  return [ring];
+}
+
+function rectToPolyNorm(x1, y1, x2, y2, modelW, modelH) {
+  const nx1 = x1 / modelW + 0.5, ny1 = 0.5 - y1 / modelH;
+  const nx2 = x2 / modelW + 0.5, ny2 = 0.5 - y2 / modelH;
+  const xmin = Math.min(nx1, nx2), xmax = Math.max(nx1, nx2);
+  const ymin = Math.min(ny1, ny2), ymax = Math.max(ny1, ny2);
+  return [[[xmin, ymin], [xmax, ymin], [xmax, ymax], [xmin, ymax]]];
+}
+
+function applyEraserShape(eraserMulti, label) {
+  if (!state.basePolys) return;
+  const snapBefore = snapshotEdits();
+
+  if (state.editTarget === 'base') {
+    try {
+      state.basePolys = polygonClipping.difference(state.basePolys, eraserMulti);
+    } catch (e) { console.warn('erase base failed', e); return; }
+  } else {
+    if (!state.detailZones) return;
+    const newZones = [];
+    for (const zone of state.detailZones) {
+      try {
+        const result = polygonClipping.difference([zone.polygon], eraserMulti);
+        for (const poly of result) {
+          if (!poly || !poly[0] || poly[0].length < 3) continue;
+          newZones.push({ polygon: poly, customHeight: zone.customHeight });
+        }
+      } catch (e) {
+        console.warn('erase zone failed', e);
+        newZones.push({ polygon: zone.polygon, customHeight: zone.customHeight });
+      }
+    }
+    state.detailZones = newZones;
+  }
+
+  state.selectedZones = [];
+  const snapAfter = snapshotEdits();
+  rebuild();
+  logHistory(label,
+    () => restoreEdits(snapBefore),
+    () => restoreEdits(snapAfter)
+  );
+}
+
+function doEraserClick(m) {
+  const r = state.eraserSize / 2;
+  const circle = circleToPolyNorm(m.x, m.y, r, m.modelW, m.modelH);
+  const target = state.editTarget === 'base' ? 'подложка' : 'рисунок';
+  applyEraserShape(circle, `Удалено: Ø${state.eraserSize} мм (${target})`);
+}
+
+function doEraserBrush(points) {
+  if (!points.length) return;
+  const r = state.eraserSize / 2;
+  const circles = points.map(p => circleToPolyNorm(p.x, p.y, r, p.modelW, p.modelH));
+  let eraserMulti;
+  if (circles.length === 1) {
+    eraserMulti = circles[0];
+  } else {
+    try {
+      eraserMulti = polygonClipping.union(...circles);
+    } catch (e) {
+      eraserMulti = circles[0];
+      for (let i = 1; i < circles.length; i++) {
+        try { eraserMulti = polygonClipping.union(eraserMulti, circles[i]); } catch {}
+      }
+    }
+  }
+  const target = state.editTarget === 'base' ? 'подложка' : 'рисунок';
+  applyEraserShape(eraserMulti, `Кисть: ${points.length} точек (${target})`);
+}
+
+function doEraserSelect(m1, m2) {
+  const rect = rectToPolyNorm(m1.x, m1.y, m2.x, m2.y, m1.modelW, m1.modelH);
+  const target = state.editTarget === 'base' ? 'подложка' : 'рисунок';
+  applyEraserShape(rect, `Выделение (${target})`);
+}
+
+function findZoneAt(m) {
+  const x_norm = m.x / m.modelW + 0.5;
+  const y_norm = 0.5 - m.y / m.modelH;
+  if (!state.detailZones) return null;
+  for (const zone of state.detailZones) {
+    const poly = zone.polygon;
+    if (!poly || !poly[0]) continue;
+    if (pointInPolygon(x_norm, y_norm, poly[0])) {
+      let inHole = false;
+      for (let i = 1; i < poly.length; i++) {
+        if (pointInPolygon(x_norm, y_norm, poly[i])) { inHole = true; break; }
+      }
+      if (!inHole) return zone;
+    }
+  }
+  return null;
+}
+
+function selectZoneAt(m, addToSelection) {
+  const found = findZoneAt(m);
+  if (addToSelection) {
+    if (found) {
+      const i = state.selectedZones.indexOf(found);
+      if (i >= 0) state.selectedZones.splice(i, 1);
+      else state.selectedZones.push(found);
+    }
+  } else {
+    state.selectedZones = found ? [found] : [];
+  }
+  updateEditUI();
+  rebuild();
+}
+
+// ============ PREVIEW ============
+function addBrushPreviewCircle(m) {
+  const r = state.eraserSize / 2;
+  const geom = new THREE.CircleGeometry(r, 24);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xd96b6b, transparent: true, opacity: 0.28,
+    side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(m.x, m.y, state.baseHeight + 0.1);
+  mesh.renderOrder = 1600;
+  previewGroup.add(mesh);
+}
+
+function updateSelectPreview(m1, m2) {
+  clearGroup(previewGroup);
+  const w = Math.abs(m2.x - m1.x);
+  const h = Math.abs(m2.y - m1.y);
+  if (w < 0.2 || h < 0.2) return;
+  const cx = (m1.x + m2.x) / 2;
+  const cy = (m1.y + m2.y) / 2;
+  const z = state.baseHeight + 0.1;
+
+  const geom = new THREE.PlaneGeometry(w, h);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xd96b6b, transparent: true, opacity: 0.22,
+    side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cx, cy, z);
+  mesh.renderOrder = 1600;
+  previewGroup.add(mesh);
+
+  const edgeGeom = new THREE.EdgesGeometry(geom);
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0xd96b6b, depthTest: false, depthWrite: false });
+  const line = new THREE.LineSegments(edgeGeom, edgeMat);
+  line.position.copy(mesh.position);
+  line.renderOrder = 1601;
+  previewGroup.add(line);
+}
+
+// ============ POINTER EVENTS ============
+let editPointerState = null;
+let pointerDownPos = null;
+
+renderer.domElement.addEventListener('pointerdown', e => {
+  pointerDownPos = { x: e.clientX, y: e.clientY, button: e.button };
+
+  if (state.editMode && e.button === 0 && state.editAction === 'delete') {
+    const m = screenToModel2D(e.clientX, e.clientY);
+    if (m) {
+      editPointerState = {
+        startX: e.clientX, startY: e.clientY,
+        startModel: m, tool: state.editTool, points: [m],
+      };
+      if (state.editTool === 'brush') {
+        clearGroup(previewGroup);
+        addBrushPreviewCircle(m);
+      }
+      cursorRing.visible = false;
+    }
+  }
+});
+
+renderer.domElement.addEventListener('pointermove', e => {
+  if (state.editMode && state.editAction === 'delete') {
+    if (state.editTool === 'click' || state.editTool === 'brush') {
+      if (editPointerState && editPointerState.tool === 'brush') {
+        cursorRing.visible = false;
+        const m = screenToModel2D(e.clientX, e.clientY);
+        if (m) {
+          const r = state.eraserSize / 2;
+          const last = editPointerState.points[editPointerState.points.length - 1];
+          if (!last || Math.hypot(m.x - last.x, m.y - last.y) >= r / 3) {
+            editPointerState.points.push(m);
+            addBrushPreviewCircle(m);
+            requestRender();
+          }
+        }
+      } else {
+        const m = screenToModel2D(e.clientX, e.clientY);
+        if (m) {
+          const r = state.eraserSize / 2;
+          cursorRing.position.set(m.x, m.y, state.baseHeight + 0.15);
+          cursorRing.scale.set(r, r, 1);
+          cursorRing.visible = true;
+          requestRender();
+        } else {
+          cursorRing.visible = false;
+          requestRender();
+        }
+      }
+    } else if (state.editTool === 'select' && editPointerState && editPointerState.tool === 'select') {
+      const m = screenToModel2D(e.clientX, e.clientY);
+      if (m) updateSelectPreview(editPointerState.startModel, m);
+      requestRender();
+    }
+  }
+});
+
+renderer.domElement.addEventListener('pointerup', e => {
+  if (state.editMode && e.button === 0 && state.editAction === 'delete' && editPointerState) {
+    const st = editPointerState;
+    editPointerState = null;
+    const dragDist = Math.hypot(e.clientX - st.startX, e.clientY - st.startY);
+
+    if (st.tool === 'click') {
+      if (dragDist < 4) {
+        const m = screenToModel2D(e.clientX, e.clientY);
+        if (m) doEraserClick(m);
+      }
+    } else if (st.tool === 'brush') {
+      if (st.points.length > 0) doEraserBrush(st.points);
+      clearGroup(previewGroup);
+    } else if (st.tool === 'select') {
+      if (dragDist >= 4) {
+        const endM = screenToModel2D(e.clientX, e.clientY);
+        if (endM) doEraserSelect(st.startModel, endM);
+      }
+      clearGroup(previewGroup);
+    }
+    requestRender();
+    return;
+  }
+
+  if (state.editMode && e.button === 0 && state.editAction === 'height') {
+    const dragDist = pointerDownPos ? Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) : 0;
+    pointerDownPos = null;
+    if (dragDist < 4) {
+      const m = screenToModel2D(e.clientX, e.clientY);
+      if (m) selectZoneAt(m, e.ctrlKey || e.metaKey);
+    }
+    return;
+  }
+
+  if (!state.magnetMode || !pointerDownPos) return;
+  const dx = e.clientX - pointerDownPos.x, dy = e.clientY - pointerDownPos.y;
+  const btn = pointerDownPos.button;
+  pointerDownPos = null;
+  if (Math.hypot(dx, dy) > 4) return;
+  if (btn !== 0) return;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  const my = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(new THREE.Vector2(mx, my), camera);
+
+  const meshes = modelGroup.children.filter(c => c.isMesh);
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (!hits.length) return;
+
+  const pt = hits[0].point;
+  const { modelW, modelH } = getModelDims();
+  const x_norm = pt.x / modelW + 0.5;
+  const y_norm = 0.5 - pt.y / modelH;
+  if (x_norm < 0.02 || x_norm > 0.98 || y_norm < 0.02 || y_norm > 0.98) return;
+
+  const r = state.magnetDiam / 2;
+  const newCx = (x_norm - 0.5) * modelW;
+  const newCy = (0.5 - y_norm) * modelH;
+  for (const mh of state.magnetHoles) {
+    const ecx = (mh.x_norm - 0.5) * modelW;
+    const ecy = (0.5 - mh.y_norm) * modelH;
+    if (Math.hypot(ecx - newCx, ecy - newCy) < r * 2 * 0.9) return;
+  }
+
+  const magnetObj = { x_norm, y_norm };
+  state.magnetHoles.push(magnetObj);
+  rebuild();
+  logHistory(`Добавлена ниша Ø${state.magnetDiam} мм (глубина ${state.magnetDepth} мм)`,
+    () => {
+      const idx = state.magnetHoles.indexOf(magnetObj);
+      if (idx >= 0) state.magnetHoles.splice(idx, 1);
+      rebuild();
+    },
+    () => { state.magnetHoles.push(magnetObj); rebuild(); }
+  );
+});
+
+renderer.domElement.addEventListener('pointerleave', () => {
+  cursorRing.visible = false;
+  requestRender();
+});
+
+// ============ HEIGHT EDIT ============
+zoneHeightInput.addEventListener('change', () => {
+  if (!state.selectedZones.length) return;
+  const newH = parseFloat(zoneHeightInput.value);
+  if (isNaN(newH) || newH <= 0) { updateEditUI(); return; }
+
+  const snapBefore = snapshotEdits();
+  for (const zone of state.selectedZones) {
+    zone.customHeight = newH;
+  }
+  const snapAfter = snapshotEdits();
+  rebuild();
+
+  const n = state.selectedZones.length;
+  logHistory(`Высота ${n === 1 ? 'элемента' : (n + ' элементов')}: ${newH.toFixed(1)} мм`,
+    () => restoreEdits(snapBefore),
+    () => restoreEdits(snapAfter)
+  );
+});
+
+// ============ MASK / CONTOUR HELPERS ============
+function blurMask(mask, w, h, radius) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    const v = Math.round(mask[i] * 255);
+    img.data[i*4] = v; img.data[i*4+1] = v; img.data[i*4+2] = v; img.data[i*4+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const c2 = document.createElement('canvas');
+  c2.width = w; c2.height = h;
+  const ctx2 = c2.getContext('2d');
+  ctx2.filter = `blur(${radius}px)`;
+  ctx2.drawImage(c, 0, 0);
+  const data = ctx2.getImageData(0, 0, w, h).data;
+  const out = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) out[i] = data[i*4] / 255;
+  return out;
+}
+
+function signedArea(ring) {
+  let s = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const j = (i + 1) % ring.length;
+    s += ring[i][0] * ring[j][1] - ring[j][0] * ring[i][1];
+  }
+  return s / 2;
+}
+
+function extractContours(mask, w, h) {
+  const gen = d3Contours().size([w, h]).thresholds([0.5]).smooth(false);
+  const result = gen(mask);
+  const polys = [];
+  for (const mp of result) {
+    for (const rings of mp.coordinates) {
+      if (!rings.length) continue;
+      const cleaned = rings.map(r => {
+        const out = r.map(p => [p[0], p[1]]);
+        if (out.length > 1) {
+          const a = out[0], b = out[out.length - 1];
+          if (Math.abs(a[0]-b[0]) < 1e-6 && Math.abs(a[1]-b[1]) < 1e-6) out.pop();
+        }
+        return out;
+      }).filter(r => r.length >= 4);
+      if (!cleaned.length) continue;
+      polys.push({ outer: cleaned[0], holes: cleaned.slice(1) });
+    }
+  }
+  return polys;
+}
+
+function perpDist(p, a, b) {
+  const dx = b[0]-a[0], dy = b[1]-a[1];
+  const len2 = dx*dx + dy*dy;
+  if (len2 < 1e-12) return Math.hypot(p[0]-a[0], p[1]-a[1]);
+  const t = ((p[0]-a[0])*dx + (p[1]-a[1])*dy) / len2;
+  const tc = Math.max(0, Math.min(1, t));
+  return Math.hypot(p[0]-a[0]-tc*dx, p[1]-a[1]-tc*dy);
+}
+function rdp(points, eps) {
+  if (points.length < 3) return points;
+  let maxD = 0, idx = 0;
+  const first = points[0], last = points[points.length - 1];
+  for (let i = 1; i < points.length - 1; i++) {
+    const d = perpDist(points[i], first, last);
+    if (d > maxD) { maxD = d; idx = i; }
+  }
+  if (maxD > eps) {
+    const L = rdp(points.slice(0, idx + 1), eps);
+    const R = rdp(points.slice(idx), eps);
+    return L.slice(0, -1).concat(R);
+  }
+  return [first, last];
+}
+function rdpClosed(ring, eps) {
+  if (ring.length < 4) return ring;
+  let maxI = 0, maxD = 0;
+  for (let i = 1; i < ring.length; i++) {
+    const d = Math.hypot(ring[i][0]-ring[0][0], ring[i][1]-ring[0][1]);
+    if (d > maxD) { maxD = d; maxI = i; }
+  }
+  if (maxI === 0) return ring;
+  const a1 = rdp(ring.slice(0, maxI + 1), eps);
+  const a2 = rdp([...ring.slice(maxI), ring[0]], eps);
+  const res = a1.slice(0, -1).concat(a2.slice(0, -1));
+  return res.length >= 3 ? res : ring;
+}
+
+function applyRDPToPolys(polys, w, h, eps) {
+  const result = [];
+  for (const p of polys) {
+    if (p.outer.length < 4) continue;
+    let outer = p.outer.map(([x, y]) => [x / w, y / h]);
+    if (Math.abs(signedArea(outer)) < 1e-7) continue;
+    outer = rdpClosed(outer, eps);
+    if (outer.length < 3) continue;
+    const holes = p.holes
+      .map(hh => rdpClosed(hh.map(([x, y]) => [x / w, y / h]), eps))
+      .filter(hh => hh.length >= 3 && Math.abs(signedArea(hh)) > 1e-7);
+    result.push([outer, ...holes]);
+  }
+  return result;
+}
+
+function offsetPolys(polys, modelW, modelH, deltaMM) {
+  const CL = window.ClipperLib;
+  if (!CL) { console.warn('clipper-lib не загружен'); return polys; }
+  if (Math.abs(deltaMM) < 0.001) return polys;
+
+  const SCALE = 1000;
+  const result = [];
+
+  for (const poly of polys) {
+    const src = poly[0];
+    if (!src || src.length < 3) continue;
+
+    const outerPath = src.map(([x, y]) => ({
+      X: Math.round((x - 0.5) * modelW * SCALE),
+      Y: Math.round((0.5 - y) * modelH * SCALE),
+    }));
+    if (!CL.Clipper.Orientation(outerPath)) outerPath.reverse();
+
+    const paths = [outerPath];
+    for (let i = 1; i < poly.length; i++) {
+      if (poly[i].length < 3) continue;
+      const holePath = poly[i].map(([x, y]) => ({
+        X: Math.round((x - 0.5) * modelW * SCALE),
+        Y: Math.round((0.5 - y) * modelH * SCALE),
+      }));
+      if (CL.Clipper.Orientation(holePath)) holePath.reverse();
+      paths.push(holePath);
+    }
+
+    const co = new CL.ClipperOffset(2, 0.25);
+    co.AddPaths(paths, CL.JoinType.jtMiter, CL.EndType.etClosedPolygon);
+    const solution = new CL.Paths();
+    co.Execute(solution, -deltaMM * SCALE);
+
+    if (!solution.length) continue;
+
+    const outers = [];
+    const holes = [];
+    for (const path of solution) {
+      if (path.length < 3) continue;
+      if (CL.Clipper.Orientation(path)) outers.push(path);
+      else holes.push(path);
+    }
+
+    for (const outerPathOut of outers) {
+      const outerNorm = outerPathOut.map(p => [
+        p.X / SCALE / modelW + 0.5,
+        0.5 - p.Y / SCALE / modelH,
+      ]);
+      const outerHoles = [];
+      for (const holePathOut of holes) {
+        const pt = holePathOut[0];
+        if (CL.Clipper.PointInPolygon(pt, outerPathOut) !== 0) {
+          outerHoles.push(holePathOut.map(p => [
+            p.X / SCALE / modelW + 0.5,
+            0.5 - p.Y / SCALE / modelH,
+          ]));
+        }
+      }
+      result.push([outerNorm, ...outerHoles]);
+    }
+  }
+
+  return result;
+}
+
+function recomputeMasks(resetHoles) {
+  if (!state.srcPixels) return;
+  const src = state.srcPixels;
+  const w = state.maskW, h = state.maskH;
+
+  const baseMask = new Float32Array(w * h);
+  const detailMask = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const a = src[i*4 + 3];
+    if (a > 100) {
+      baseMask[i] = 1;
+      const lum = src[i*4]*0.299 + src[i*4+1]*0.587 + src[i*4+2]*0.114;
+      const isDetail = state.invertRelief ? (lum >= 128) : (lum < 128);
+      if (isDetail) detailMask[i] = 1;
+    }
+  }
+
+  setStatus('Извлечение контуров...');
+  const blurredBase = blurMask(baseMask, w, h, 0.4);
+  const blurredDetail = blurMask(detailMask, w, h, 0.4);
+
+  state.rawBasePolys = extractContours(blurredBase, w, h);
+  state.rawDetailPolys = extractContours(blurredDetail, w, h);
+  state.polygonsDirty = true;
+  state.selectedZones = [];
+
+  if (resetHoles) {
+    state.magnetHoles = [];
+    state.firstBuild = true;
+  }
+  rebuild();
+}
+
+// ============ PNG LOAD ============
+async function loadPNG(file) {
+  setStatus('Обработка изображения...');
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  try {
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+  } catch { setStatus('Ошибка загрузки'); return; }
+  finally { URL.revokeObjectURL(url); }
+
+  const before = captureFullState();
+
+  state.imgAspect = img.width / img.height;
+
+  let newW, newH;
+  if (state.imgAspect >= 1) {
+    newW = DEFAULT_SIZE_MM;
+    newH = Math.max(1, Math.round(DEFAULT_SIZE_MM / state.imgAspect));
+  } else {
+    newH = DEFAULT_SIZE_MM;
+    newW = Math.max(1, Math.round(DEFAULT_SIZE_MM * state.imgAspect));
+  }
+  sizeBind.setValues(newW, newH);
+
+  const maxDim = Math.min(
+    Math.max(Math.round(Math.max(newW, newH) * 22), 1400),
+    2000
+  );
+  let maskW, maskH;
+  if (img.width >= img.height) {
+    maskW = maxDim; maskH = Math.max(1, Math.round(maxDim * img.height / img.width));
+  } else {
+    maskH = maxDim; maskW = Math.max(1, Math.round(maxDim * img.width / img.height));
+  }
+
+  const tmp = document.createElement('canvas');
+  tmp.width = maskW; tmp.height = maskH;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(img, 0, 0, maskW, maskH);
+  const src = tctx.getImageData(0, 0, maskW, maskH).data;
+
+  state.srcPixels = src;
+  state.maskW = maskW;
+  state.maskH = maskH;
+  state.selectedZones = [];
+  recomputeMasks(true);
+
+  const after = captureFullState();
+
+  logHistory(`Загружен PNG: ${file.name} (${img.width}×${img.height})`,
+    () => restoreFullState(before),
+    () => restoreFullState(after)
+  );
+}
+
+pngInput.addEventListener('change', async e => {
+  const f = e.target.files?.[0];
+  e.target.value = '';
+  if (f) await loadPNG(f);
+});
+
+// ============ HELPERS ============
+function pointInPolygon(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function circleInsidePolygon(cx, cy, r, outer, holes) {
+  if (!pointInPolygon(cx, cy, outer)) return false;
+  for (const h of holes) if (pointInPolygon(cx, cy, h)) return false;
+  for (let a = 0; a < 16; a++) {
+    const ang = a * Math.PI * 2 / 16;
+    const px = cx + r * Math.cos(ang);
+    const py = cy + r * Math.sin(ang);
+    if (!pointInPolygon(px, py, outer)) return false;
+    for (const h of holes) if (pointInPolygon(px, py, h)) return false;
+  }
+  return true;
+}
+function clearGroup(g) {
+  while (g.children.length) {
+    const c = g.children.pop();
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) {
+      if (c.material.map) c.material.map.dispose();
+      c.material.dispose && c.material.dispose();
+    }
+  }
+}
+
+// ============ REBUILD ============
+function rebuild() {
+  clearGroup(modelGroup);
+  clearGroup(markerGroup);
+
+  if (state.invertRelief) {
+    baseMaterial.color.setHex(COL_DARK);
+    detailMaterial.color.setHex(COL_LIGHT);
+  } else {
+    baseMaterial.color.setHex(COL_LIGHT);
+    detailMaterial.color.setHex(COL_DARK);
+  }
+
+  if (!state.rawBasePolys || state.realWidth === null) {
+    state.lastBounds = null;
+    updateInfoBar();
+    requestRender();
+    return;
+  }
+
+  if (state.polygonsDirty || !state.basePolys || !state.detailZones) {
+    const eps = state.smoothness / 1000;
+    state.basePolys = applyRDPToPolys(state.rawBasePolys, state.maskW, state.maskH, eps);
+    const rawDetail = applyRDPToPolys(state.rawDetailPolys, state.maskW, state.maskH, eps);
+    state.detailZones = rawDetail.map(p => ({ polygon: p, customHeight: null }));
+    state.polygonsDirty = false;
+    state.selectedZones = [];
+  }
+
+  if (!state.basePolys.length) {
+    state.lastBounds = null;
+    updateInfoBar();
+    exportBtn.disabled = true;
+    requestRender();
+    return;
+  }
+
+  const { modelW, modelH } = getModelDims();
+  const totalH = state.baseHeight + state.detailHeight;
+
+  const magnetHolesMM = state.magnetHoles.map(mh => ({
+    cx: (mh.x_norm - 0.5) * modelW,
+    cy: (0.5 - mh.y_norm) * modelH,
+    r: state.magnetDiam / 2,
+    depth: state.magnetDepth,
+  }));
+
+  let baseMultiPreHoles = state.basePolys;
+  if (Math.abs(state.offsetMM) > 0.001) {
+    baseMultiPreHoles = offsetPolys(baseMultiPreHoles, modelW, modelH, state.offsetMM);
+    if (!baseMultiPreHoles.length) {
+      exportBtn.disabled = true;
+      const word = state.offsetMM > 0 ? 'Сжатие' : 'Расширение';
+      setStatus(`${word} ${Math.abs(state.offsetMM)} мм слишком велико — деталь исчезла`);
+      state.lastBounds = null;
+      updateInfoBar();
+      requestRender();
+      return;
+    }
+  }
+
+  {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const poly of baseMultiPreHoles) {
+      for (const [x, y] of poly[0]) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (isFinite(minX)) state.lastBounds = { w: (maxX - minX) * modelW, h: (maxY - minY) * modelH };
+    else state.lastBounds = null;
+  }
+
+  const throughAll  = magnetHolesMM.filter(mh => mh.depth >= totalH - 0.01);
+  const throughBase = magnetHolesMM.filter(mh => mh.depth >= state.baseHeight - 0.01 && mh.depth < totalH - 0.01);
+  const blind       = magnetHolesMM.filter(mh => mh.depth < state.baseHeight - 0.01);
+
+  const circleNorm = (mh) => {
+    const segs = 48;
+    const arr = [];
+    for (let i = 0; i < segs; i++) {
+      const ang = -i * Math.PI * 2 / segs;
+      const px = mh.cx + mh.r * Math.cos(ang);
+      const py = mh.cy + mh.r * Math.sin(ang);
+      arr.push([px / modelW + 0.5, 0.5 - py / modelH]);
+    }
+    return [arr];
+  };
+
+  let baseMulti = baseMultiPreHoles;
+  for (const mh of throughBase) {
+    try { baseMulti = polygonClipping.difference(baseMulti, circleNorm(mh)); }
+    catch (e) { console.warn(e); }
+  }
+  for (const mh of throughAll) {
+    try { baseMulti = polygonClipping.difference(baseMulti, circleNorm(mh)); }
+    catch (e) { console.warn(e); }
+  }
+
+  for (const polygon of baseMulti) {
+    const g = buildBaseGeometry(polygon, blind, 0, state.baseHeight, modelW, modelH);
+    if (!g) continue;
+    const m = new THREE.Mesh(g, baseMaterial);
+    m.userData = { type: 'base', polygon, magnetHolesMM: blind, z0: 0, z1: state.baseHeight, modelW, modelH };
+    modelGroup.add(m);
+  }
+
+  for (const zone of state.detailZones) {
+    let zonePolys;
+    try { zonePolys = polygonClipping.intersection([zone.polygon], baseMultiPreHoles); }
+    catch (e) { zonePolys = []; }
+    if (!zonePolys || !zonePolys.length) continue;
+
+    for (const mh of throughAll) {
+      try { zonePolys = polygonClipping.difference(zonePolys, circleNorm(mh)); }
+      catch (e) { console.warn(e); }
+    }
+    if (!zonePolys || !zonePolys.length) continue;
+
+    const zoneH = zone.customHeight ?? state.detailHeight;
+    const z1 = state.baseHeight + zoneH;
+
+    for (const poly of zonePolys) {
+      if (!poly || !poly[0] || poly[0].length < 3) continue;
+      const g = buildDetailGeometry(poly, state.baseHeight, z1, modelW, modelH);
+      if (!g) continue;
+      const m = new THREE.Mesh(g, detailMaterial);
+      m.userData = { type: 'detail', polygon: poly, z0: state.baseHeight, z1, modelW, modelH, zoneRef: zone };
+      modelGroup.add(m);
+    }
+  }
+
+  for (const mh of state.magnetHoles) {
+    const x = (mh.x_norm - 0.5) * modelW;
+    const y = (0.5 - mh.y_norm) * modelH;
+    const r = state.magnetDiam / 2;
+    const isDeep = state.magnetDepth >= state.baseHeight - 0.01;
+    if (state.magnetMode || isDeep) {
+      const tAll  = state.magnetDepth >= totalH - 0.01;
+      const tBase = !tAll && state.magnetDepth >= state.baseHeight - 0.01;
+      const markerZ = tAll ? 0 : (tBase ? state.baseHeight : state.magnetDepth);
+      const disc = new THREE.Mesh(
+        new THREE.CircleGeometry(r, 48),
+        new THREE.MeshBasicMaterial({
+          color: 0xd96b6b, transparent: true, opacity: 0.35,
+          side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+        })
+      );
+      disc.position.set(x, y, markerZ + 0.01);
+      disc.renderOrder = 999;
+      markerGroup.add(disc);
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(r * 0.9, r, 48),
+        new THREE.MeshBasicMaterial({ color: 0xd96b6b, side: THREE.DoubleSide, depthTest: false, depthWrite: false })
+      );
+      ring.position.set(x, y, markerZ + 0.01);
+      ring.renderOrder = 1000;
+      markerGroup.add(ring);
+    } else {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(r * 0.85, r, 48),
+        new THREE.MeshBasicMaterial({ color: 0xd96b6b, side: THREE.DoubleSide })
+      );
+      ring.position.set(x, y, -0.15);
+      markerGroup.add(ring);
+    }
+  }
+
+  if (state.editMode && state.editAction === 'height') {
+    for (const zone of state.selectedZones) {
+      if (!zone.polygon) continue;
+      const zoneH = zone.customHeight ?? state.detailHeight;
+      const z1 = state.baseHeight + zoneH;
+      const outer = zone.polygon[0].map(([x, y]) => [(x - 0.5) * modelW, (0.5 - y) * modelH]);
+      const pts = [];
+      for (let i = 0; i < outer.length; i++) {
+        const j = (i + 1) % outer.length;
+        pts.push(outer[i][0], outer[i][1], z1 + 0.15);
+        pts.push(outer[j][0], outer[j][1], z1 + 0.15);
+      }
+      if (pts.length) {
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+        const mat = new THREE.LineBasicMaterial({ color: 0xe8a34b, depthTest: false, depthWrite: false });
+        const line = new THREE.LineSegments(geom, mat);
+        line.renderOrder = 1500;
+        markerGroup.add(line);
+      }
+    }
+  }
+
+  if (state.firstBuild) {
+    setTopView();
+    state.firstBuild = false;
+  } else {
+    controls.target.z = getPartCenterZ();
+    controls.update();
+  }
+
+  magnetInfo.textContent = `Ниш: ${state.magnetHoles.length} · в подложке: ${throughBase.length} · насквозь: ${throughAll.length}`;
+  updateInfoBar();
+  exportBtn.disabled = !modelGroup.children.some(c => c.isMesh);
+  requestRender();
+}
+
+// ============ GEOMETRY ============
+function addWallGeometry(pA, pB, z0, z1, positions, indices) {
+  const a = positions.length / 3;
+  positions.push(pA[0], pA[1], z0);
+  positions.push(pB[0], pB[1], z0);
+  positions.push(pB[0], pB[1], z1);
+  positions.push(pA[0], pA[1], z1);
+  indices.push(a, a+1, a+2, a, a+2, a+3);
+}
+
+function triCap(flat, holeStarts, z, isBottom, positions, indices) {
+  const idx = earcut(flat, holeStarts.length ? holeStarts : undefined, 2);
+  if (!idx.length) return;
+  for (let i = 0; i < idx.length; i += 3) {
+    const a = idx[i], b = idx[i+1], c = idx[i+2];
+    const ax = flat[a*2], ay = flat[a*2+1];
+    const bx = flat[b*2], by = flat[b*2+1];
+    const cx = flat[c*2], cy = flat[c*2+1];
+    const area = (bx-ax)*(cy-ay) - (cx-ax)*(by-ay);
+    const isCCW = area > 0;
+    if (isCCW !== !isBottom) { idx[i+1] = c; idx[i+2] = b; }
+  }
+  const vStart = positions.length / 3;
+  const nV = flat.length / 2;
+  for (let i = 0; i < nV; i++) positions.push(flat[i*2], flat[i*2+1], z);
+  for (let i = 0; i < idx.length; i += 3)
+    indices.push(vStart + idx[i], vStart + idx[i+1], vStart + idx[i+2]);
+}
+
+function buildBaseGeometry(polygon, magnetHolesMM, z0, z1, modelW, modelH) {
+  const positions = [];
+  const indices = [];
+
+  const outer = polygon[0].map(([x, y]) => [(x - 0.5) * modelW, (0.5 - y) * modelH]);
+  const holeRings = polygon.slice(1).map(h => h.map(([x, y]) => [(x - 0.5) * modelW, (0.5 - y) * modelH]));
+  if (signedArea(outer) < 0) outer.reverse();
+  for (const h of holeRings) if (signedArea(h) > 0) h.reverse();
+
+  const localMagnet = [];
+  for (const mh of magnetHolesMM) {
+    if (!circleInsidePolygon(mh.cx, mh.cy, mh.r, outer, holeRings)) continue;
+    const depth = Math.min(mh.depth, z1 - z0);
+    if (depth < 0.1) continue;
+    const segs = 32;
+    const circ = [];
+    for (let i = 0; i < segs; i++) {
+      const ang = -i * Math.PI * 2 / segs;
+      circ.push([mh.cx + mh.r * Math.cos(ang), mh.cy + mh.r * Math.sin(ang)]);
+    }
+    localMagnet.push({ ...mh, depth, zBottom: z0 + depth, circ });
+  }
+
+  {
+    const flat = [];
+    for (const [x, y] of outer) flat.push(x, y);
+    const hs = [];
+    for (const h of holeRings) { hs.push(flat.length / 2); for (const [x, y] of h) flat.push(x, y); }
+    for (const mh of localMagnet) { hs.push(flat.length / 2); for (const [x, y] of mh.circ) flat.push(x, y); }
+    triCap(flat, hs, z0, true, positions, indices);
+  }
+  {
+    const flat = [];
+    for (const [x, y] of outer) flat.push(x, y);
+    const hs = [];
+    for (const h of holeRings) { hs.push(flat.length / 2); for (const [x, y] of h) flat.push(x, y); }
+    triCap(flat, hs, z1, false, positions, indices);
+  }
+
+  for (let i = 0; i < outer.length; i++)
+    addWallGeometry(outer[i], outer[(i+1)%outer.length], z0, z1, positions, indices);
+  for (const h of holeRings)
+    for (let i = 0; i < h.length; i++)
+      addWallGeometry(h[i], h[(i+1)%h.length], z0, z1, positions, indices);
+
+  for (const mh of localMagnet) {
+    const segs = mh.circ.length;
+    for (let i = 0; i < segs; i++)
+      addWallGeometry(mh.circ[i], mh.circ[(i+1)%segs], z0, mh.zBottom, positions, indices);
+    const cIdx = positions.length / 3;
+    positions.push(mh.cx, mh.cy, mh.zBottom);
+    for (const [x, y] of mh.circ) positions.push(x, y, mh.zBottom);
+    for (let i = 0; i < segs; i++) {
+      const j = (i + 1) % segs;
+      indices.push(cIdx, cIdx + 1 + j, cIdx + 1 + i);
+    }
+  }
+
+  if (!positions.length || !indices.length) return null;
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setIndex(indices);
+  geom.computeVertexNormals();
+  return geom;
+}
+
+function buildDetailGeometry(polygon, z0, z1, modelW, modelH) {
+  const positions = [];
+  const indices = [];
+  const outer = polygon[0].map(([x, y]) => [(x - 0.5) * modelW, (0.5 - y) * modelH]);
+  const holeRings = polygon.slice(1).map(h => h.map(([x, y]) => [(x - 0.5) * modelW, (0.5 - y) * modelH]));
+  if (signedArea(outer) < 0) outer.reverse();
+  for (const h of holeRings) if (signedArea(h) > 0) h.reverse();
+
+  const flat = [];
+  for (const [x, y] of outer) flat.push(x, y);
+  const hs = [];
+  for (const h of holeRings) { hs.push(flat.length / 2); for (const [x, y] of h) flat.push(x, y); }
+  triCap(flat, hs, z0, true, positions, indices);
+  triCap(flat, hs, z1, false, positions, indices);
+
+  for (let i = 0; i < outer.length; i++)
+    addWallGeometry(outer[i], outer[(i+1)%outer.length], z0, z1, positions, indices);
+  for (const h of holeRings)
+    for (let i = 0; i < h.length; i++)
+      addWallGeometry(h[i], h[(i+1)%h.length], z0, z1, positions, indices);
+
+  if (!positions.length || !indices.length) return null;
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setIndex(indices);
+  geom.computeVertexNormals();
+  return geom;
+}
+
+// ============ STEP BUILDER ============
+class StepBuilder {
+  constructor() { this.lines = []; this.id = 1; this.cache = new Map(); }
+  emit(s) { const id = this.id++; this.lines.push(`#${id}=${s};`); return id; }
+  cached(k, fn) {
+    if (this.cache.has(k)) return this.cache.get(k);
+    const v = fn(); this.cache.set(k, v); return v;
+  }
+  point(x, y, z) {
+    return this.cached(`P|${x.toFixed(4)}|${y.toFixed(4)}|${z.toFixed(4)}`,
+      () => this.emit(`CARTESIAN_POINT('',(${x.toFixed(4)},${y.toFixed(4)},${z.toFixed(4)}))`));
+  }
+  dir(x, y, z) {
+    return this.cached(`D|${x.toFixed(5)}|${y.toFixed(5)}|${z.toFixed(5)}`,
+      () => this.emit(`DIRECTION('',(${x.toFixed(5)},${y.toFixed(5)},${z.toFixed(5)}))`));
+  }
+  vector(x, y, z) {
+    return this.cached(`V|${x.toFixed(5)}|${y.toFixed(5)}|${z.toFixed(5)}`,
+      () => this.emit(`VECTOR('',#${this.dir(x, y, z)},1.0)`));
+  }
+  axis2(px, py, pz, nx, ny, nz, rx, ry, rz) {
+    const k = `A2|${px.toFixed(4)}|${py.toFixed(4)}|${pz.toFixed(4)}|${nx.toFixed(5)}|${ny.toFixed(5)}|${nz.toFixed(5)}|${rx.toFixed(5)}|${ry.toFixed(5)}|${rz.toFixed(5)}`;
+    return this.cached(k, () => {
+      const p = this.point(px, py, pz);
+      const n = this.dir(nx, ny, nz);
+      const r = this.dir(rx, ry, rz);
+      return this.emit(`AXIS2_PLACEMENT_3D('',#${p},#${n},#${r})`);
+    });
+  }
+  vertex(x, y, z) {
+    return this.cached(`VTX|${x.toFixed(4)}|${y.toFixed(4)}|${z.toFixed(4)}`,
+      () => this.emit(`VERTEX_POINT('',#${this.point(x, y, z)})`));
+  }
+  line3d(px, py, pz, vx, vy, vz) {
+    return this.cached(`L|${px.toFixed(4)}|${py.toFixed(4)}|${pz.toFixed(4)}|${vx.toFixed(5)}|${vy.toFixed(5)}|${vz.toFixed(5)}`,
+      () => this.emit(`LINE('',#${this.point(px, py, pz)},#${this.vector(vx, vy, vz)})`));
+  }
+  edgeCurve(v1, v2, p1, p2) {
+    const key = `E|${Math.min(v1,v2)}|${Math.max(v1,v2)}`;
+    if (!this.cache.has(key)) {
+      let fromV, toV, fromP, toP;
+      if (v1 < v2) { fromV = v1; toV = v2; fromP = p1; toP = p2; }
+      else { fromV = v2; toV = v1; fromP = p2; toP = p1; }
+      const dx = toP[0]-fromP[0], dy = toP[1]-fromP[1], dz = toP[2]-fromP[2];
+      const len = Math.hypot(dx, dy, dz) || 1;
+      const line = this.line3d(fromP[0], fromP[1], fromP[2], dx/len, dy/len, dz/len);
+      const ec = this.emit(`EDGE_CURVE('',#${fromV},#${toV},#${line},.T.)`);
+      this.cache.set(key, ec);
+    }
+    return { id: this.cache.get(key), sense: v1 < v2 };
+  }
+  orientedEdge(id, sense) { return this.emit(`ORIENTED_EDGE('',*,*,#${id},.${sense ? 'T' : 'F'}.)`); }
+  edgeLoop(ids) { return this.emit(`EDGE_LOOP('',(${ids.map(i => '#' + i).join(',')}))`); }
+  faceBound(loopId, ori) { return this.emit(`FACE_BOUND('',#${loopId},.${ori ? 'T' : 'F'}.)`); }
+  faceOuterBound(loopId, ori) { return this.emit(`FACE_OUTER_BOUND('',#${loopId},.${ori ? 'T' : 'F'}.)`); }
+  plane(px, py, pz, nx, ny, nz, rx, ry, rz) {
+    return this.emit(`PLANE('',#${this.axis2(px, py, pz, nx, ny, nz, rx, ry, rz)})`);
+  }
+  advancedFace(bounds, planeId, sameSense) {
+    return this.emit(`ADVANCED_FACE('',(${bounds.map(i => '#' + i).join(',')}),#${planeId},.${sameSense ? 'T' : 'F'}.)`);
+  }
+  closedShell(ids) { return this.emit(`CLOSED_SHELL('',(${ids.map(i => '#' + i).join(',')}))`); }
+  solid(shell, name) { return this.emit(`MANIFOLD_SOLID_BREP('${name}',#${shell})`); }
+  resetCache() {
+    for (const k of [...this.cache.keys()]) {
+      if (k.startsWith('VTX|') || k.startsWith('E|')) this.cache.delete(k);
+    }
+  }
+}
+
+function stepWallFace(step, pA, pB, z0, z1, eB, eT, eVi, eVj, faces) {
+  const oe1 = step.orientedEdge(eB.id, eB.sense);
+  const oe2 = step.orientedEdge(eVj.id, eVj.sense);
+  const oe3 = step.orientedEdge(eT.id, !eT.sense);
+  const oe4 = step.orientedEdge(eVi.id, !eVi.sense);
+  const loop = step.edgeLoop([oe1, oe2, oe3, oe4]);
+  const bound = step.faceOuterBound(loop, true);
+  const dx = pB[0] - pA[0], dy = pB[1] - pA[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = dy/len, ny = -dx/len;
+  const plane = step.plane(pA[0], pA[1], z0, nx, ny, 0, dx/len, dy/len, 0);
+  faces.push(step.advancedFace([bound], plane, true));
+}
+
+function makeRingEdges(step, pts, zBottom, zTop, vB, vT) {
+  const N = pts.length;
+  const eB = [], eT = [], eV = [];
+  for (let i = 0; i < N; i++) {
+    const j = (i + 1) % N;
+    eB.push(step.edgeCurve(vB[i], vB[j], [pts[i][0], pts[i][1], zBottom], [pts[j][0], pts[j][1], zBottom]));
+    eT.push(step.edgeCurve(vT[i], vT[j], [pts[i][0], pts[i][1], zTop], [pts[j][0], pts[j][1], zTop]));
+    eV.push(step.edgeCurve(vB[i], vT[i], [pts[i][0], pts[i][1], zBottom], [pts[i][0], pts[i][1], zTop]));
+  }
+  return { eB, eT, eV };
+}
+
+function exportSolid(step, polygon, magnetHolesMM, z0, z1, modelW, modelH, name) {
+  step.resetCache();
+  const outer = polygon[0].map(([x, y]) => [(x - 0.5) * modelW, (0.5 - y) * modelH]);
+  const holeRings = polygon.slice(1).map(h => h.map(([x, y]) => [(x - 0.5) * modelW, (0.5 - y) * modelH]));
+  if (signedArea(outer) < 0) outer.reverse();
+  for (const h of holeRings) if (signedArea(h) > 0) h.reverse();
+
+  const localMagnet = [];
+  if (magnetHolesMM) {
+    for (const mh of magnetHolesMM) {
+      if (!circleInsidePolygon(mh.cx, mh.cy, mh.r, outer, holeRings)) continue;
+      const depth = Math.min(mh.depth, z1 - z0 - 0.05);
+      if (depth < 0.1) continue;
+      const segs = 32;
+      const circ = [];
+      for (let i = 0; i < segs; i++) {
+        const ang = -i * Math.PI * 2 / segs;
+        circ.push([mh.cx + mh.r * Math.cos(ang), mh.cy + mh.r * Math.sin(ang)]);
+      }
+      localMagnet.push({ ...mh, depth, zBottom: z0 + depth, circ });
+    }
+  }
+
+  const makeRing = (pts) => {
+    const vB = pts.map(([x,y]) => step.vertex(x, y, z0));
+    const vT = pts.map(([x,y]) => step.vertex(x, y, z1));
+    const { eB, eT, eV } = makeRingEdges(step, pts, z0, z1, vB, vT);
+    return { pts, vB, vT, eB, eT, eV };
+  };
+  const outerR = makeRing(outer);
+  const holeRs = holeRings.map(makeRing);
+  const magnetRs = localMagnet.map(mh => {
+    const vB = mh.circ.map(([x,y]) => step.vertex(x, y, z0));
+    const vT = mh.circ.map(([x,y]) => step.vertex(x, y, mh.zBottom));
+    const { eB, eT, eV } = makeRingEdges(step, mh.circ, z0, mh.zBottom, vB, vT);
+    return { ...mh, pts: mh.circ, vB, vT, eB, eT, eV };
+  });
+
+  const faces = [];
+
+  {
+    const bounds = [];
+    {
+      const OEs = [];
+      for (let i = outer.length - 1; i >= 0; i--)
+        OEs.push(step.orientedEdge(outerR.eB[i].id, !outerR.eB[i].sense));
+      bounds.push(step.faceOuterBound(step.edgeLoop(OEs), true));
+    }
+    for (const hd of holeRs) {
+      const N = hd.pts.length;
+      const OEs = [];
+      for (let i = N - 1; i >= 0; i--)
+        OEs.push(step.orientedEdge(hd.eB[i].id, !hd.eB[i].sense));
+      bounds.push(step.faceBound(step.edgeLoop(OEs), true));
+    }
+    for (const mh of magnetRs) {
+      const N = mh.pts.length;
+      const OEs = [];
+      for (let i = N - 1; i >= 0; i--)
+        OEs.push(step.orientedEdge(mh.eB[i].id, !mh.eB[i].sense));
+      bounds.push(step.faceBound(step.edgeLoop(OEs), true));
+    }
+    faces.push(step.advancedFace(bounds, step.plane(0, 0, z0, 0, 0, 1, 1, 0, 0), false));
+  }
+  {
+    const bounds = [];
+    {
+      const OEs = [];
+      for (let i = 0; i < outer.length; i++)
+        OEs.push(step.orientedEdge(outerR.eT[i].id, outerR.eT[i].sense));
+      bounds.push(step.faceOuterBound(step.edgeLoop(OEs), true));
+    }
+    for (const hd of holeRs) {
+      const N = hd.pts.length;
+      const OEs = [];
+      for (let i = 0; i < N; i++)
+        OEs.push(step.orientedEdge(hd.eT[i].id, hd.eT[i].sense));
+      bounds.push(step.faceBound(step.edgeLoop(OEs), true));
+    }
+    faces.push(step.advancedFace(bounds, step.plane(0, 0, z1, 0, 0, 1, 1, 0, 0), true));
+  }
+  for (let i = 0; i < outer.length; i++) {
+    const j = (i + 1) % outer.length;
+    stepWallFace(step, outer[i], outer[j], z0, z1, outerR.eB[i], outerR.eT[i], outerR.eV[i], outerR.eV[j], faces);
+  }
+  for (const hd of holeRs) {
+    for (let i = 0; i < hd.pts.length; i++) {
+      const j = (i + 1) % hd.pts.length;
+      stepWallFace(step, hd.pts[i], hd.pts[j], z0, z1, hd.eB[i], hd.eT[i], hd.eV[i], hd.eV[j], faces);
+    }
+  }
+  for (const mh of magnetRs) {
+    for (let i = 0; i < mh.pts.length; i++) {
+      const j = (i + 1) % mh.pts.length;
+      stepWallFace(step, mh.pts[i], mh.pts[j], z0, mh.zBottom, mh.eB[i], mh.eT[i], mh.eV[i], mh.eV[j], faces);
+    }
+    {
+      const OEs = [];
+      for (let i = 0; i < mh.pts.length; i++)
+        OEs.push(step.orientedEdge(mh.eT[i].id, mh.eT[i].sense));
+      const loop = step.edgeLoop(OEs);
+      const bound = step.faceOuterBound(loop, true);
+      const plane = step.plane(mh.cx, mh.cy, mh.zBottom, 0, 0, 1, 1, 0, 0);
+      faces.push(step.advancedFace([bound], plane, false));
+    }
+  }
+
+  const shell = step.closedShell(faces);
+  return step.solid(shell, name);
+}
+
+// ============ EXPORT ============
+function exportSTEP() {
+  const meshes = modelGroup.children.filter(c => c.isMesh && c.userData && c.userData.polygon);
+  if (!meshes.length) return;
+
+  exportBtn.disabled = true;
+  setStatus('Генерация STEP...');
+
+  setTimeout(() => {
+    try {
+      const step = new StepBuilder();
+
+      const appCtx = step.emit(`APPLICATION_CONTEXT('core data for automotive mechanical design processes')`);
+      step.emit(`APPLICATION_PROTOCOL_DEFINITION('international standard','automotive_design',2000,#${appCtx})`);
+      const prodCtx = step.emit(`PRODUCT_CONTEXT('',#${appCtx},'mechanical')`);
+      const product = step.emit(`PRODUCT('model','model','',(#${prodCtx}))`);
+      const pdf = step.emit(`PRODUCT_DEFINITION_FORMATION('','',#${product})`);
+      const pdCtx = step.emit(`PRODUCT_DEFINITION_CONTEXT('part definition',#${appCtx},'design')`);
+      const pd = step.emit(`PRODUCT_DEFINITION('design','',#${pdf},#${pdCtx})`);
+      const pds = step.emit(`PRODUCT_DEFINITION_SHAPE('','',#${pd})`);
+
+      const lengthUnit = step.emit(`( LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.MILLI.,.METRE.) )`);
+      const angleUnit = step.emit(`( NAMED_UNIT(*) PLANE_ANGLE_UNIT() SI_UNIT($,.RADIAN.) )`);
+      const solidAngleUnit = step.emit(`( NAMED_UNIT(*) SI_UNIT($,.STERADIAN.) SOLID_ANGLE_UNIT() )`);
+      const uncertainty = step.emit(`UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-07),#${lengthUnit},'distance_accuracy_value','confusion accuracy')`);
+      const geomCtx = step.emit(`( GEOMETRIC_REPRESENTATION_CONTEXT(3) GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#${uncertainty})) GLOBAL_UNIT_ASSIGNED_CONTEXT((#${lengthUnit},#${angleUnit},#${solidAngleUnit})) REPRESENTATION_CONTEXT('','3D') )`);
+
+      const originPt = step.point(0, 0, 0);
+      const zDir = step.dir(0, 0, 1);
+      const xDir = step.dir(1, 0, 0);
+      const worldAxis = step.emit(`AXIS2_PLACEMENT_3D('',#${originPt},#${zDir},#${xDir})`);
+
+      const solidIds = [];
+      let idx = 0;
+      for (const m of meshes) {
+        const u = m.userData;
+        const sid = exportSolid(step, u.polygon, u.magnetHolesMM || null, u.z0, u.z1, u.modelW, u.modelH,
+          `${u.type}_${idx++}`);
+        if (sid) solidIds.push(sid);
+      }
+
+      if (!solidIds.length) { setStatus('Нечего экспортировать'); exportBtn.disabled = false; return; }
+
+      const items = ['#' + worldAxis, ...solidIds.map(i => '#' + i)].join(',');
+      const advBrep = step.emit(`ADVANCED_BREP_SHAPE_REPRESENTATION('model',(${items}),#${geomCtx})`);
+      step.emit(`SHAPE_DEFINITION_REPRESENTATION(#${pds},#${advBrep})`);
+
+      const header =
+`ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('PNG2STP'),'2;1');
+FILE_NAME('model.stp','${new Date().toISOString()}',(''),(''),'PNG2STP','','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));
+ENDSEC;
+DATA;
+`;
+      const text = header + step.lines.join('\n') + '\nENDSEC;\nEND-ISO-10303-21;\n';
+      const blob = new Blob([text], { type: 'application/step' });
+      const sizeKB = (blob.size / 1024).toFixed(0);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'model.stp';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      logHistory(`STEP сохранён: ${solidIds.length} тел, ${sizeKB} КБ`);
+    } catch (e) {
+      console.error(e);
+      setStatus('Ошибка экспорта: ' + e.message);
+      logHistory('Ошибка экспорта: ' + e.message);
+    } finally {
+      exportBtn.disabled = false;
+    }
+  }, 20);
+}
+exportBtn.addEventListener('click', exportSTEP);
+
+// Начальный вид
+updateSwitchLabels();
+renderHistory();
+updateInfoBar();
+updateEditUI();
+setTopView();
+requestRender();
+</script>
+</body>
+</html>
